@@ -1,0 +1,9 @@
+version: "3.8"
+
+services:
+  organizador:
+    build: .
+    volumes:
+      - ./entrada:/app/entrada
+      - ./salida:/app/salida
+    command: bash /app/scripts/convert_all.sh

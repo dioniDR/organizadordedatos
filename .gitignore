@@ -1,0 +1,7 @@
+# Ignorar contenido de entrada y salida, pero mantener carpetas
+entrada/*
+salida/*
+
+# ¡Excepto! los archivos `.gitkeep` para que Git no borre las carpetas
+!entrada/.gitkeep
+!salida/.gitkeep
