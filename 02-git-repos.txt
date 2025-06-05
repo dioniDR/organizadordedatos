@@ -1,0 +1,7 @@
+  Remote: https://github.com/dioniDR/organizadordedatos.git
+  Branch: main
+  Last commit: 2025-06-03
+  Status: 1 modified files
+  Size: 300K
+
+Repository: /home/dioni/Escritorio/MCP

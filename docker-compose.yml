@@ -1,9 +1,99 @@
-version: "3.8"
+version: '3.9'
 
 services:
-  organizador:
-    build: .
+  organizador_documentos:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: organizador_documentos
+    hostname: organizador-docs
     volumes:
-      - ./entrada:/app/entrada
-      - ./salida:/app/salida
-    command: bash /app/scripts/convert_all.sh
+      - ${INPUT_PATH:-./entrada}:/app/entrada:ro
+      - ${OUTPUT_PATH:-./salida}:/app/salida
+      - ${DB_PATH:-./db}:/app/db
+      - ${LOG_PATH:-./logs}:/app/logs
+    environment:
+      - DEBIAN_FRONTEND=noninteractive
+      - LANG=C.UTF-8
+      - LC_ALL=C.UTF-8
+      - TZ=${TIMEZONE:-Europe/Madrid}
+      - INPUT_DIR=/app/entrada
+      - OUTPUT_DIR=/app/salida
+      - DB_DIR=/app/db
+      - LOG_DIR=/app/logs
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - MAX_PARALLEL_JOBS=${MAX_PARALLEL_JOBS:-4}
+    restart: unless-stopped
+    tty: true
+    stdin_open: true
+    networks:
+      - organizador_net
+    healthcheck:
+      test: |
+        test -d "$$INPUT_DIR" && 
+        test -d "$$OUTPUT_DIR" && 
+        test -w "$$OUTPUT_DIR" &&
+        test -d "$$LOG_DIR" &&
+        ps aux | grep -v grep | grep -q convert_all
+      interval: 30s
+      timeout: 15s
+      start_period: 30s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: ${MEMORY_LIMIT:-2g}
+          cpus: '${CPU_LIMIT:-2.0}'
+        reservations:
+          memory: 512m
+          cpus: '0.5'
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    labels:
+      - "com.organizador.service=documentos"
+      - "com.organizador.version=1.0"
+    command: |
+      bash -c "
+        /app/scripts/setup.sh --validate && 
+        exec /app/scripts/convert_all.sh 2>&1 | tee /app/logs/processing.log
+      "
+
+  # Servicio opcional de monitoreo
+  monitor:
+    image: alpine:latest
+    container_name: organizador_monitor
+    volumes:
+      - ${LOG_PATH:-./logs}:/logs:ro
+      - ${OUTPUT_PATH:-./salida}:/salida:ro
+    environment:
+      - TZ=${TIMEZONE:-Europe/Madrid}
+    networks:
+      - organizador_net
+    depends_on:
+      - organizador_documentos
+    profiles:
+      - monitoring
+    command: |
+      sh -c "
+        apk add --no-cache watch coreutils &&
+        watch -n 30 'echo === ESTADO DEL PROCESAMIENTO === &&
+        echo Archivos en entrada: $$(find /logs/../entrada -type f 2>/dev/null | wc -l) &&
+        echo Archivos en salida: $$(find /salida -type f 2>/dev/null | wc -l) &&
+        echo Tamaño de salida: $$(du -sh /salida 2>/dev/null | cut -f1) &&
+        echo Último log: $$(tail -1 /logs/processing.log 2>/dev/null || echo Sin logs) &&
+        echo === $$(date) ==='
+      "
+
+networks:
+  organizador_net:
+    driver: bridge
+    name: organizador_network
+
+volumes:
+  organizador_db:
+    name: organizador_database
+  organizador_logs:
+    name: organizador_logs
